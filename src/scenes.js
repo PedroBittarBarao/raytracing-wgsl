@@ -506,4 +506,31 @@ async function Everything()
     };
 }
 
+async function MyScene()
+{
+    let spheres = [
+        new Sphere([0, -1001, 0], [0.5, 0.5, 0.5], 1000, [0.0, 0.0, 0.0, 0.0]),
+        new Sphere([-0.0, -0.5, -2.0], [1.0, 0.0, 0.0], 0.5, [0.0, 0.0, 0.0, 0.0]),
+		new Sphere([-1.0, -0.5, -2.0], [1.0, 0.0, 0.0], 0.5, [0.0, 0.0, 0.0, 0.0]),
+		new Sphere([1.0, -0.5, -2.0], [1.0, 0.0, 0.0], 0.5, [0.0, 0.0, 0.0, 0.0]),
+		new Sphere([-0.0, -0.5, -3.0], [1.0, 0.0, 0.0], 0.5, [0.0, 0.0, 0.0, 0.0]),
+		new Sphere([-1.0, -0.5, -3.0], [1.0, 0.0, 0.0], 0.5, [0.0, 0.0, 0.0, 0.0]),
+    ];
+
+    return {
+        spheres, 
+        quads: [], 
+        boxes: [], 
+        triangles: [], 
+        meshes: [], 
+        backgroundColor1: [0.0, 0.5, 1.0], 
+        backgroundColor2: [1.0, 1.0, 1.0],
+        focusDistance: 5.0, 
+        focusAngle: 0.0,
+        sunIntensity: 1.0,
+        samplesPerPixel: 1.0,
+        maxBounces: 10.0
+    };
+}
+
 export { getAvailableScene };
