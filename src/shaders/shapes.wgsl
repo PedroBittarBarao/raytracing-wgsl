@@ -84,7 +84,7 @@ fn hit_triangle(r: ray, v0: vec3f, v1: vec3f, v2: vec3f, record: ptr<function, h
   record.hit_anything = true;
 }
 
-fn hit_box(r: ray, center: vec3f, rad: vec3f, record: ptr<function, hit_record>, t_max: f32)
+fn hit_box(r: ray, center: vec3f, rad: vec3f, record: ptr<function, hit_record>, t_max: f32) -> bool
 {
   var m = 1.0 / r.direction;
   var n = m * (r.origin - center);
@@ -99,14 +99,14 @@ fn hit_box(r: ray, center: vec3f, rad: vec3f, record: ptr<function, hit_record>,
   if (tN > tF || tF < 0.0)
   {
     record.hit_anything = false;
-    return;
+    return false;
   }
 
   var t = tN;
   if (t < RAY_TMIN || t > t_max)
   {
     record.hit_anything = false;
-    return;
+    return false;
   }
 
   record.t = t;
@@ -114,5 +114,5 @@ fn hit_box(r: ray, center: vec3f, rad: vec3f, record: ptr<function, hit_record>,
   record.normal = -sign(r.direction) * step(t1.yzx, t1.xyz) * step(t1.zxy, t1.xyz);
   record.hit_anything = true;
 
-  return;
+  return true;
 }

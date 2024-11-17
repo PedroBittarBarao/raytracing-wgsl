@@ -190,18 +190,25 @@ fn check_ray_collision(r: ray, max: f32) -> hit_record
   for (var i = 0; i < quadsCount; i++)
   {
     var quad = quadsb[i];
-    hit_quad(r, quad.Q, quad.u, quad.v, &record, max);
+    if (hit_quad(r, quad.Q, quad.u, quad.v, &record, max) && record.t < closest_t){
+      closest_t = record.t;
+      record.object_color = quad.color;
+      record.object_material = quad.material;
+    };
   }
 
   for (var i = 0; i < boxesCount; i++)
   {
     var box = boxesb[i];
-    hit_box(r, vec3f(box.center.xyz), vec3f(box.radius.xyz), &record, max);
+    if (hit_box(r, vec3f(box.center.xyz), vec3f(box.radius.xyz), &record, max) && record.t < closest_t){
+      closest_t = record.t;
+      record.object_color = box.color;
+      record.object_material = box.material;
+    };
   }
 
-  var closest = record;
 
-  return closest;
+  return record;
 }
 
 fn lambertian(normal: vec3f, absorption: f32, random_sphere: vec3f, rng_state: ptr<function, u32>) -> material_behaviour {
@@ -234,35 +241,21 @@ fn schlick(cosine: f32, refraction_index: f32) -> f32
   return r0 + (1.0 - r0) * pow(1.0 - cosine, 5.0);
 }
 
-fn dielectric(normal : vec3f, r_direction: vec3f, refraction_index: f32, frontface: bool, random_sphere: vec3f, fuzz: f32, rng_state: ptr<function, u32>) -> material_behaviour
-{  
-  var refracted_ray = refraction_index * (r_direction - dot(r_direction, normal) * normal);
-  var attenuation = vec3f(1.0);
-  var reflect_prob = 1.0;
-  var cosine = 1.0;
-  if (dot(r_direction, normal) > 0.0)
-  {
-    cosine = refraction_index * dot(r_direction, normal) / length(r_direction);
-  }
-  else
-  {
-    cosine = -dot(r_direction, normal) / length(r_direction);
-  }
-  var reflectance = schlick(cosine, refraction_index);
-  if (reflectance > 0.0)
-  {
-    reflect_prob = reflectance;
-  }
-  if (rng_next_float(rng_state) < reflect_prob)
-  {
-    return material_behaviour(true, reflect(r_direction, normal) + fuzz * random_sphere);
-  }
-  else
-  {
-    return material_behaviour(true, refracted_ray + fuzz * random_sphere);
-  }
+fn dielectric(
+    normal: vec3f, 
+    r_direction: vec3f, 
+    refraction_index: f32, 
+    frontface: bool, 
+    random_sphere: vec3f, 
+    fuzz: f32, 
+    rng_state: ptr<function, u32>
+) -> material_behaviour {
+    
 
+    return material_behaviour(true, vec3f(1.0));
 }
+
+
 
 fn emmisive(color: vec3f, light: f32) -> material_behaviour
 {
@@ -293,6 +286,8 @@ fn trace(r: ray, rng_state: ptr<function, u32>) -> vec3f {
         var specular = record.object_material.z;
         var light = record.object_material.w;
 
+        var specular_prob = rng_next_float(rng_state);
+
         var material_response : material_behaviour;
         // If no collision, use environment color as the final light
         if (!record.hit_anything) {
@@ -306,22 +301,22 @@ fn trace(r: ray, rng_state: ptr<function, u32>) -> vec3f {
             light_color += accumulated_color * material_response_emissive.direction;
             break;
         }
-
-        if (smoothness > 0.0) {
-            // Metal or smooth reflective material
-            var metal_response = metal(record.normal, current_ray.direction, absorption, rng_next_vec3_in_unit_sphere(rng_state));
-            material_response = material_behaviour(metal_response.scatter, metal_response.direction);
-        } else if (smoothness < 0.0) {
+        if (smoothness < 0.0) {
             // Dielectric (transparent) material
-            var dielectric_response = dielectric(record.normal, current_ray.direction, smoothness, record.frontface, rng_next_vec3_in_unit_sphere(rng_state), absorption, rng_state);
-            material_response = material_behaviour(dielectric_response.scatter, dielectric_response.direction);
-        } else {
-            // Lambertian material (diffuse)
-            var lambertian_response = lambertian(record.normal, 0, rng_next_vec3_in_unit_sphere(rng_state), rng_state);
-            material_response = material_behaviour(lambertian_response.scatter, lambertian_response.direction);
-            accumulated_color *= record.object_color.xyz;  // Attenuate color with object color for diffuse
+            var dielectric_response = dielectric(record.normal, current_ray.direction, smoothness, record.frontface, rng_next_vec3_in_unit_sphere(rng_state), absorption, rng_state); 
+            material_response = dielectric_response;
         }
-
+        else{
+          if (specular_prob < specular) {
+              var metal_response = metal(record.normal, current_ray.direction, absorption, rng_next_vec3_in_unit_sphere(rng_state));
+              material_response = metal_response;
+          } else {
+              var lambertian_response = lambertian(record.normal, absorption, rng_next_vec3_in_unit_sphere(rng_state), rng_state);
+              material_response = lambertian_response;
+          }
+          accumulated_color *= mix(record.object_color.xyz,vec3f(1.0), specular); 
+        }
+        
         // Update ray direction and attenuation based on material response
         if (material_response.scatter) {
             current_ray = ray(record.p, normalize(material_response.direction));
