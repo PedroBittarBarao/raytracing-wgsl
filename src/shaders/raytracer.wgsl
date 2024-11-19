@@ -171,10 +171,31 @@ fn check_ray_collision(r: ray, max: f32) -> hit_record
   var closest_t = max;
   record.t = max;
   record.hit_anything = false;
+  var local_record = hit_record(RAY_TMAX, vec3f(0.0), vec3f(0.0), vec4f(0.0), vec4f(0.0), false, false);;
 
-  // Check spheres
-  for (var i = 0; i < spheresCount; i++)
+
+  for (var i = 0; i < boxesCount; i++)
   {
+    var box = boxesb[i];
+    if (hit_box(r, box.center.xyz, box.radius.xyz, box.rotation.xyz, &record, closest_t) && record.t < closest_t) {
+    closest_t = record.t;
+    record.object_color = box.color;
+    record.object_material = box.material;
+    }
+  }
+
+
+  for (var i = 0; i < quadsCount; i++)
+  {
+    var quad = quadsb[i];
+    if (hit_quad(r, quad.Q, quad.u, quad.v, &record, max) && record.t < closest_t){
+      closest_t = record.t;
+      record.object_color = quad.color;
+      record.object_material = quad.material;
+    };
+  }
+
+  for (var i = 0; i < spheresCount; i++){
     var sphere = spheresb[i];
     var center = vec3(sphere.transform.x, sphere.transform.y, sphere.transform.z);
     var radius = sphere.transform.w;
@@ -187,25 +208,8 @@ fn check_ray_collision(r: ray, max: f32) -> hit_record
     }
   }
 
-  for (var i = 0; i < quadsCount; i++)
-  {
-    var quad = quadsb[i];
-    if (hit_quad(r, quad.Q, quad.u, quad.v, &record, max) && record.t < closest_t){
-      closest_t = record.t;
-      record.object_color = quad.color;
-      record.object_material = quad.material;
-    };
-  }
-
-  for (var i = 0; i < boxesCount; i++)
-  {
-    var box = boxesb[i];
-    if (hit_box(r, vec3f(box.center.xyz), vec3f(box.radius.xyz), &record, max) && record.t < closest_t){
-      closest_t = record.t;
-      record.object_color = box.color;
-      record.object_material = box.material;
-    };
-  }
+  record.frontface = dot(r.direction, record.normal) < 0.0;
+  record.normal = select(-record.normal , record.normal,record.frontface);
 
 
   return record;
@@ -241,18 +245,38 @@ fn schlick(cosine: f32, refraction_index: f32) -> f32
   return r0 + (1.0 - r0) * pow(1.0 - cosine, 5.0);
 }
 
-fn dielectric(
-    normal: vec3f, 
-    r_direction: vec3f, 
-    refraction_index: f32, 
-    frontface: bool, 
-    random_sphere: vec3f, 
-    fuzz: f32, 
-    rng_state: ptr<function, u32>
-) -> material_behaviour {
-    
+fn dielectric(normal: vec3f, r_direction: vec3f, refraction_index: f32, frontface: bool, random_sphere: vec3f, fuzz: f32, rng_state: ptr<function, u32>) -> material_behaviour {
+    // Compute the ratio of refractive indices
+    let ri = select(refraction_index, 1.0 / refraction_index, frontface);
 
-    return material_behaviour(true, vec3f(1.0));
+    // Normalize the incoming ray direction
+    let unit_direction = normalize(r_direction);
+
+    // Calculate cosine and sine of the angle between the ray and the normal
+    let cos_theta = min(dot(-unit_direction, normal), 1.0);
+    let sin_theta = sqrt(1.0 - cos_theta * cos_theta);
+
+    // Determine if total internal reflection occurs
+    let cannot_refract = ri * sin_theta > 1.0;
+
+    // Compute reflectance using Schlick's approximation
+    let r0 = (1.0 - ri) / (1.0 + ri);
+    let r0_squared = r0 * r0;
+    let reflect_prob = r0_squared + (1.0 - r0_squared) * pow(1.0 - cos_theta, 5.0);
+
+    // Decide whether to reflect or refract
+    var direction: vec3f;
+    if (cannot_refract || reflect_prob > rng_next_float(rng_state)) {
+        // Reflect the ray
+        direction = reflect(unit_direction, normal);
+    } else {
+        // Refract the ray
+        let r_perp = ri * (unit_direction + cos_theta * normal);
+        let r_parallel = -sqrt(abs(1.0 - dot(r_perp, r_perp))) * normal;
+        direction = r_perp + r_parallel;
+    }
+
+    return material_behaviour(true, normalize(direction));
 }
 
 
@@ -303,8 +327,9 @@ fn trace(r: ray, rng_state: ptr<function, u32>) -> vec3f {
         }
         if (smoothness < 0.0) {
             // Dielectric (transparent) material
-            var dielectric_response = dielectric(record.normal, current_ray.direction, smoothness, record.frontface, rng_next_vec3_in_unit_sphere(rng_state), absorption, rng_state); 
+            var dielectric_response = dielectric(record.normal, current_ray.direction, specular, record.frontface, rng_next_vec3_in_unit_sphere(rng_state), absorption, rng_state); 
             material_response = dielectric_response;
+            record.p = record.p - 0.01 * record.normal;
         }
         else{
           if (specular_prob < specular) {
