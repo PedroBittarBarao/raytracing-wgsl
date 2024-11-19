@@ -175,14 +175,16 @@ fn check_ray_collision(r: ray, max: f32) -> hit_record
 
 
   for (var i = 0; i < boxesCount; i++)
-  {
+{
     var box = boxesb[i];
-    if (hit_box(r, box.center.xyz, box.radius.xyz, box.rotation.xyz, &record, closest_t) && record.t < closest_t) {
-    closest_t = record.t;
-    record.object_color = box.color;
-    record.object_material = box.material;
+    if (hit_box(r, box.center.xyz, box.radius.xyz, box.rotation.xyz, &local_record, closest_t) && local_record.t < closest_t) {
+        closest_t = local_record.t;  // Update closest intersection distance
+        record = local_record;       // Copy local_record to record
+        record.object_color = box.color;
+        record.object_material = box.material;
     }
-  }
+}
+
 
 
   for (var i = 0; i < quadsCount; i++)
